@@ -1,0 +1,77 @@
+Starting state (main database file):
+Accounts:
+A has 100 dollars.
+B has 50 dollars.
+
+Inventory:
+X has 10 units.
+
+The WAL file is empty.
+
+Transactions we will perform in order:
+
+Transaction 1 transfers 30 dollars from A to B.
+This means A goes from 100 to 70, and B goes from 50 to 80.
+
+Transaction 2 adds 5 units to X.
+This means X goes from 10 to 15.
+
+Transaction 3 transfers 20 dollars from B to A.
+This means B goes from 80 to 60, and A goes from 70 to 90.
+
+Each transaction is appended to the WAL as records, and a COMMIT record is appended when the transaction finishes successfully.
+
+WAL appends, shown as lines in order of occurrence:
+T1 A equals 100 to 70.
+T1 B equals 50 to 80.
+T1 COMMIT.
+T2 X equals 10 to 15.
+T2 COMMIT.
+T3 B equals 80 to 60.
+T3 A equals 70 to 90.
+T3 COMMIT.
+
+The main database file remains unchanged until a checkpoint copies the WAL changes into the database.
+
+Normal final state after the checkpoint copies the WAL into the database:
+
+Apply committed transactions in order.
+After T1, A equals 70 and B equals 80.
+After T2, X equals 15.
+After T3, A equals 90 and B equals 60.
+
+The final database has A equals 90 dollars, B equals 60 dollars, and X equals 15.
+
+Crash scenarios showing recovery to a consistent state:
+
+Crash 1 — crash before T1 COMMIT.
+The WAL contains:
+T1 A equals 100 to 70.
+T1 B equals 50 to 80.
+No T1 COMMIT.
+Recovery rule says to ignore uncommitted transactions.
+Recovered database is unchanged from the original state: A equals 100, B equals 50, and X equals 10. The database is consistent.
+
+Crash 2 — crash after T1 COMMIT but before T2 COMMIT.
+The WAL contains:
+T1 entries and T1 COMMIT.
+T2 X equals 10 to 15 but no T2 COMMIT.
+Recovery applies T1 because it is committed and ignores T2 because it is not committed.
+Recovered database logical state: A equals 70, B equals 80, X equals 10. The database is consistent.
+
+Crash 3 — crash after T1 and T2 COMMIT but during T3 before T3 COMMIT.
+The WAL contains T1 with COMMIT, T2 with COMMIT, and T3 B equals 80 to 60.
+No T3 COMMIT.
+Recovery applies T1 and T2 because they are committed and ignores T3 because it is not committed.
+Recovered database: A equals 70, B equals 80, X equals 15. The database is consistent.
+
+Crash 4 — crash during checkpoint with partial copying of committed transactions into the main database.
+Suppose the WAL has T1, T2, and T3, all with COMMIT records, and the checkpoint started copying but crashed after copying the Accounts pages and before copying the Inventory pages.
+The WAL still contains T1, T2, T3, and their COMMIT records.
+Recovery consults the WAL and applies all committed transactions to produce the final logical state regardless of partial checkpoint progress.
+Recovered database after recovery: A equals 90, B equals 60, X equals 15. The database is consistent.
+
+Why this proves consistency:
+Uncommitted changes are ignored on recovery, which shows atomicity.
+Committed changes present in the WAL are durable and will appear after recovery, which shows durability.
+Checkpointing is only an optimization to move committed changes into the main database. Even if a checkpoint fails, no committed work is lost because the WAL still contains the commit records and changes.
